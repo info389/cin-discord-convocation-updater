@@ -1,0 +1,1 @@
+{"name":"cin-discord-convocation-updater","private":true,"type":"module","scripts":{"update":"node scripts/update-convocation.mjs"},"dependencies":{"discord.js":"^14.25.1"}}
