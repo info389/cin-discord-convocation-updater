@@ -3,7 +3,6 @@ import { Client, EmbedBuilder, Events, GatewayIntentBits } from "discord.js";
 const required = [
   "DISCORD_TOKEN",
   "CONVOCATION_CHANNEL_ID",
-  "CONVOCATION_MESSAGE_ID",
   "CONVOCATION_ENTRANTS"
 ];
 for (const key of required) {
@@ -45,39 +44,62 @@ async function reactionUsers(message, emoji) {
     .sort((a, b) => a.name.localeCompare(b.name, "it"));
 }
 
+function buildEmbed(present, absent) {
+  const waiting = Math.max(0, entrants - present.length - absent.length);
+  const fields = [
+    { name: "📅 Data", value: `${event.date} · ${event.time}`, inline: true },
+    { name: "🏁 Gara", value: `${event.track} · ${event.laps} giri`, inline: true },
+    { name: "🌤️ Condizioni", value: `${event.weather} · ${event.tyres} set gomme`, inline: true },
+    ...splitLines(present.length ? present.map((user) => `✅ ${user.name}`) : ["Nessuna conferma ancora."])
+      .map((value, index) => ({ name: index ? "Presenti (continua)" : `✅ Presenti (${present.length})`, value })),
+    ...splitLines(absent.length ? absent.map((user) => `❌ ${user.name}`) : ["Nessuna assenza ancora."])
+      .map((value, index) => ({ name: index ? "Assenti (continua)" : `❌ Assenti (${absent.length})`, value })),
+    { name: "⏳ In attesa", value: `${waiting} su ${entrants} convocati` },
+    { name: "Come rispondere", value: "Reagisci con una sola opzione: ✅ Presente oppure ❌ Assente." }
+  ];
+  const embed = new EmbedBuilder()
+    .setColor(0xF2B705)
+    .setTitle(`Convocazione — CIN Truck Series | ${event.track}`)
+    .setDescription("Riepilogo aggiornato delle disponibilità.")
+    .addFields(fields)
+    .setFooter({ text: "CIN Cup eSports Series · Convocazione automatica" })
+    .setTimestamp();
+  if (event.logoUrl) embed.setThumbnail(event.logoUrl);
+  return { embed, waiting };
+}
+
 client.once(Events.ClientReady, async () => {
   try {
     const channel = await client.channels.fetch(process.env.CONVOCATION_CHANNEL_ID);
     if (!channel?.isTextBased()) throw new Error("Canale Discord non disponibile.");
-    const message = await channel.messages.fetch(process.env.CONVOCATION_MESSAGE_ID);
+    let message;
+    try {
+      message = await channel.messages.fetch(process.env.CONVOCATION_MESSAGE_ID);
+    } catch (error) {
+      if (error.code !== 10008) throw error;
+      const recent = await channel.messages.fetch({ limit: 100 });
+      message = recent.find((candidate) => candidate.author.id === client.user.id
+        && candidate.embeds.some((embed) => embed.footer?.text === "CIN Cup eSports Series · Convocazione automatica"));
+      if (!message) {
+        const initial = buildEmbed([], []);
+        message = await channel.send({
+          content: process.env.CONVOCATION_ROLE_ID ? `<@&${process.env.CONVOCATION_ROLE_ID}>` : undefined,
+          allowedMentions: process.env.CONVOCATION_ROLE_ID ? { roles: [process.env.CONVOCATION_ROLE_ID] } : undefined,
+          embeds: [initial.embed]
+        });
+        await message.react("✅");
+        await message.react("❌");
+      }
+    }
     const [present, absent] = await Promise.all([
       reactionUsers(message, "✅"),
       reactionUsers(message, "❌")
     ]);
     const acceptedIds = new Set(present.map((user) => user.id));
     const finalAbsent = absent.filter((user) => !acceptedIds.has(user.id));
-    const waiting = Math.max(0, entrants - present.length - finalAbsent.length);
-    const fields = [
-      { name: "📅 Data", value: `${event.date} · ${event.time}`, inline: true },
-      { name: "🏁 Gara", value: `${event.track} · ${event.laps} giri`, inline: true },
-      { name: "🌤️ Condizioni", value: `${event.weather} · ${event.tyres} set gomme`, inline: true },
-      ...splitLines(present.length ? present.map((user) => `✅ ${user.name}`) : ["Nessuna conferma ancora."])
-        .map((value, index) => ({ name: index ? "Presenti (continua)" : `✅ Presenti (${present.length})`, value })),
-      ...splitLines(finalAbsent.length ? finalAbsent.map((user) => `❌ ${user.name}`) : ["Nessuna assenza ancora."])
-        .map((value, index) => ({ name: index ? "Assenti (continua)" : `❌ Assenti (${finalAbsent.length})`, value })),
-      { name: "⏳ In attesa", value: `${waiting} su ${entrants} convocati` },
-      { name: "Come rispondere", value: "Reagisci con una sola opzione: ✅ Presente oppure ❌ Assente." }
-    ];
-    const embed = new EmbedBuilder()
-      .setColor(0xF2B705)
-      .setTitle(`Convocazione — CIN Truck Series | ${event.track}`)
-      .setDescription("Riepilogo aggiornato delle disponibilità.")
-      .addFields(fields)
-      .setFooter({ text: "CIN Cup eSports Series · Convocazione automatica" })
-      .setTimestamp();
-    if (event.logoUrl) embed.setThumbnail(event.logoUrl);
-    await message.edit({ embeds: [embed] });
-    console.log(JSON.stringify({ presenti: present.length, assenti: finalAbsent.length, attesa: waiting }));
+    const result = buildEmbed(present, finalAbsent);
+    await message.edit({ embeds: [result.embed] });
+    console.log(JSON.stringify({ presenti: present.length, assenti: finalAbsent.length, attesa: result.waiting }));
   } finally {
     client.destroy();
   }
