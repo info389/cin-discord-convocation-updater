@@ -1,0 +1,34 @@
+name: Aggiorna convocazione Discord
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --ignore-scripts
+      - run: npm run update
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          CONVOCATION_CHANNEL_ID: "1467875055525429360"
+          CONVOCATION_MESSAGE_ID: "1543278162195128322"
+          CONVOCATION_ENTRANTS: "46"
+          CONVOCATION_TRACK: "DAYTONA"
+          CONVOCATION_DATE: "31/08/2026"
+          CONVOCATION_TIME: "21:30"
+          CONVOCATION_WEATHER: "Partly Cloudy"
+          CONVOCATION_LAPS: "90"
+          CONVOCATION_TYRES: "5"
+          CONVOCATION_LOGO_URL: "https://test.i-cin.it/images/nextrace/loghi/truck/daytona.png"
+
