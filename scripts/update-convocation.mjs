@@ -79,7 +79,10 @@ client.once(Events.ClientReady, async () => {
       if (error.code !== 10008) throw error;
       const recent = await channel.messages.fetch({ limit: 100 });
       message = recent.find((candidate) => candidate.author.id === client.user.id
-        && candidate.embeds.some((embed) => embed.footer?.text === "CIN Cup eSports Series · Convocazione automatica"));
+        && candidate.embeds.some((embed) =>
+          embed.footer?.text === "CIN Cup eSports Series · Convocazione automatica"
+          && embed.title === `Convocazione — CIN Truck Series | ${event.track}`
+        ));
       if (!message) {
         const initial = buildEmbed([], []);
         message = await channel.send({
@@ -106,4 +109,3 @@ client.once(Events.ClientReady, async () => {
 });
 
 await client.login(process.env.DISCORD_TOKEN);
-
